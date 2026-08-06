@@ -34,9 +34,11 @@
 | 用户判断 | `Nameplate` | 铭牌 | 某个用户对某条罐头的写法、义项、释义、来源判断 |
 | 语义节点 | `Flavor` | 义项 | 解决“同字不同义”和跨地区同义检索 |
 | 文字入口 | `Package` | 写法 | 用户可能搜索或书写出来的字面形式 |
+| 方言读音 | `Pronunciation` | 读音 | 某写法表达某义项时，在某方言下的一种规范化读法 |
+| 方言节点 | `Dialect` | 方言/地方话 | 按需建立的方言关系树节点，不等同于行政区划 |
 | 主题集合 | `Shelf` | 集盒/盒子 | 按主题组织义项或罐头，代码暂不改名 |
 
-代码命名保持 `Can / Nameplate / Flavor / Package / Shelf` 稳定。不要回退到旧系统的 `Word/List` 命名，也不要因为品牌文案变化频繁迁移模型、API 或路由。
+代码命名保持 `Can / Nameplate / Flavor / Package / Pronunciation / Dialect / Shelf` 稳定。不要回退到旧系统的 `Word/List` 命名，也不要因为品牌文案变化频繁迁移模型、API 或路由。
 
 ## 2. 核心模型关系
 
@@ -47,12 +49,18 @@ Can 1 - N Nameplate
 Nameplate -> Flavor
 Nameplate -> Package
 Flavor N - N Package
+Pronunciation -> Package + Flavor + Dialect
+Pronunciation 1 - N Can
 Shelf N - N Flavor / Can
 ```
 
 `Flavor` 负责义项，例如“月亮”“银行机构”“行走动作”。它让用户可以快速检索“全国各地方言里月亮怎么说”。
 
 `Package` 负责写法入口，例如“行”“杀”“刣”“月光”“月娘”。它让用户搜索同一个字面形式时，能够看到不同义项。
+
+`Pronunciation` 负责读音，例如“Package=行、Flavor=行走动作、Dialect=仙游片时读作什么”。同一个 Package + Flavor 可以因方言不同而有不同读音，同一个组合在同一方言下也可以保留文白异读或争议记录。
+
+`Dialect` 只表达方言关系。莆田、仙游、游洋等地区名只有在确实用来指称一种地方话时才成为节点；没有语言资料的行政层级不预建。
 
 `Nameplate` 是具体到某条录音的用户主张。它同时指向一个 `Flavor` 和一个 `Package`，并保存释义、证据来源、权重和是否主铭牌。
 
@@ -63,7 +71,13 @@ Flavor「月亮」
 ├─ Package「月亮」
 ├─ Package「月光」
 ├─ Package「月娘」
-└─ 通过 Nameplate 连接到全国各地方言录音 Can
+└─ 通过 Pronunciation 连接到各方言读音，再连接录音 Can
+```
+
+```text
+Package「行」 + Flavor「行走动作」
+├─ Pronunciation（莆田片，读音 A）→ Can #101 / #102
+└─ Pronunciation（仙游片，读音 B）→ Can #205
 ```
 
 ```text
@@ -93,7 +107,7 @@ Can #1 某地方言录音
 | 旧系统 | 新系统 | 迁移说明 |
 | --- | --- | --- |
 | `Word` | `Flavor + Package + Nameplate` | 旧词条里“字面词形”和“义项”混在一起，新系统拆开 |
-| `Pronunciation` | `Can + FlavorVariant` | 旧发音成为录音罐头，并可挂到某个义项变体 |
+| 旧 `Pronunciation` | `Pronunciation + Can` | 规范化读音迁入 Pronunciation；每条实际音频迁为 Can 并关联为证据 |
 | `List` | `Shelf` | 旧词单迁移为主题集盒 |
 | `Application` | 后续审核/修订申请 | 首期不恢复完整申请系统，只保留治理参考 |
 | `Character` | 材料/检索参考 | 单字不作为新系统核心一等实体 |
@@ -141,6 +155,7 @@ Can #1 某地方言录音
 
 - 图鉴按 `Flavor` 组织，展示“同一个意思在不同地方怎么说”。
 - 义项详情显示关联写法、方言变体、相关罐头。
+- 这里的“方言变体”具体指按 Dialect 分组的 Pronunciation，不再使用 `FlavorVariant` 模型。
 - 例如 `Flavor=月亮` 可以检索全国各地方言里的月亮说法。
 - 义项详情可以借鉴旧词典式页面的紧凑信息结构：义项标题、关联写法、方言点统计、相关罐头、补录音入口。
 - 如果后续加入例句，例句属于义项或铭牌的补充材料，不改变 `Flavor / Package / Nameplate` 的基本关系。
@@ -216,6 +231,8 @@ Can #1 某地方言录音
 | `rejected` | 已驳回 |
 
 首期创建罐头后默认为 `unlabeled`。贴第一张铭牌后进入 `pending`。更复杂的状态流转后续由专门 issue 落地。
+
+`Pronunciation.status` 使用 `draft / verified / disputed / rejected`。认证状态属于规范化读音，不替代 Can 的可见性或 Nameplate 的社区主张。
 
 页面状态要求：
 
